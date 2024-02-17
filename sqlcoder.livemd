@@ -1,0 +1,122 @@
+<!-- livebook:{"file_entries":[{"name":"metadata.sql","type":"attachment"},{"name":"prompt.md","type":"attachment"}]} -->
+
+# SQL Coder tests
+
+```elixir
+Mix.install(
+  [
+    {:kino_bumblebee, "~> 0.4.0"},
+    {:exla, ">= 0.0.0"}
+  ],
+  config: [nx: [default_backend: EXLA.Backend]]
+)
+```
+
+## Section
+
+https://huggingface.co/defog/sqlcoder-70b-alpha
+
+This notebook attempts to run sqlcoder
+
+```elixir
+# {:ok, model_info} = Bumblebee.load_model({:hf, "defog/sqlcoder-70b-alpha"})
+{:ok, model_info} = Bumblebee.load_model({:hf, "defog/sqlcoder-7b-2"})
+```
+
+```elixir
+{:ok, tokenizer} =
+  Bumblebee.load_tokenizer({:hf, "defog/sqlcoder-7b-2"})
+```
+
+```elixir
+metadata_content =
+  Kino.FS.file_path("metadata.sql")
+  |> File.read!()
+```
+
+```elixir
+{:ok, generation_config} = Bumblebee.load_generation_config({:hf, "defog/sqlcoder-7b-2"})
+```
+
+```elixir
+serving =
+  Bumblebee.Text.generation(model_info, tokenizer, generation_config,
+    compile: [batch_size: 1, sequence_length: 500],
+    defn_options: [compiler: EXLA]
+  )
+```
+
+```elixir
+defmodule SQLCoderHelpers do
+  def generate_prompt(user_question, table_metadata_string) do
+    """
+    ### Task
+    Generate a SQL query to answer [QUESTION]#{user_question}[/QUESTION]
+
+    ### Instructions
+    - If you cannot answer the question with the available database schema, return 'I do not know'
+
+    ### Database Schema
+    The query will run on a database with the following schema:
+    #{table_metadata_string}
+
+    ### Answer
+    Given the database schema, here is the SQL query that answers [QUESTION]#{user_question}[/QUESTION]
+    [SQL]
+
+    """
+  end
+end
+
+# output = Nx.Serving.run(serving, %{question: question, context: context})
+```
+
+```elixir
+question =
+  "Do we get more revenue from customers in New York compared to customers in San Francisco? Give me the total revenue for each city, and the difference between the two."
+
+prompt = SQLCoderHelpers.generate_prompt(question, metadata_content)
+
+output = Nx.Serving.run(serving, prompt)
+```
+
+```elixir
+
+```
+
+```elixir
+{:ok, model_info} =
+  Bumblebee.load_model({:hf, "bert-large-uncased-whole-word-masking-finetuned-squad"})
+
+{:ok, tokenizer} =
+  Bumblebee.load_tokenizer({:hf, "bert-large-uncased-whole-word-masking-finetuned-squad"})
+
+Bumblebee.Text.generation()
+
+serving =
+  Bumblebee.Text.question_answering(model_info, tokenizer,
+    compile: [batch_size: 1, sequence_length: 500],
+    defn_options: [compiler: EXLA]
+  )
+```
+
+```elixir
+inputs = [
+  question: Kino.Input.text("Question", default: "What's my name?"),
+  context: Kino.Input.textarea("Context", default: "My name is Clara and I live in Berkeley.")
+]
+
+form = Kino.Control.form(inputs, submit: "Run")
+frame = Kino.Frame.new()
+
+Kino.listen(form, fn %{data: %{question: question, context: context}} ->
+  output = Nx.Serving.run(serving, %{question: question, context: context})
+
+  output.results
+  |> Enum.map(&{&1.text, &1.score})
+  |> Kino.Bumblebee.ScoredList.new()
+  |> then(&Kino.Frame.render(frame, &1))
+end)
+
+Kino.Layout.grid([form, frame], boxed: true, gap: 16)
+```

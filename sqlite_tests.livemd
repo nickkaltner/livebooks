@@ -1,0 +1,224 @@
+<!-- livebook:{"file_entries":[{"name":"balls-in-play-2022.tsv","type":"url","url":"https://raw.githubusercontent.com/westbaystars/first-pitch-homeruns/main/balls-in-play-2022.tsv"},{"name":"blah.sqlite","type":"attachment"}]} -->
+
+# Untitled notebook
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"},
+  {:adbc, "~> 0.1"},
+  {:explorer, "~> 0.7.1"},
+  {:kino_explorer, "~> 0.1.11"},
+  {:kino_db, "~> 0.2.3"},
+  {:exqlite, "~> 0.11.0"},
+  {:kino_vega_lite, "~> 0.1.10"}
+])
+```
+
+## Section
+
+```elixir
+content =
+  Kino.FS.file_path("balls-in-play-2022.tsv")
+  |> File.read!()
+```
+
+```elixir
+output =
+  Explorer.DataFrame.from_csv!(Kino.FS.file_path("balls-in-play-2022.tsv"), delimiter: "\t")
+```
+
+<!-- livebook:{"attrs":{"assign_to":null,"collect":false,"data_frame":"output","data_frame_alias":"Elixir.Explorer.DataFrame","is_data_frame":true,"missing_require":"Elixir.Explorer.DataFrame","operations":[{"active":true,"column":null,"data_options":{"Date":"string","Game":"integer","Pitch":"string","Pitches":"integer","Player":"string","Result":"string","ResultType":"string","Team":"string","Velocity":"string","選手":"string"},"datalist":[],"filter":null,"operation_type":"filters","type":"string","value":null},{"active":true,"columns":["Team","Player"],"data_options":{"Date":"string","Game":"integer","Pitch":"string","Pitches":"integer","Player":"string","Result":"string","ResultType":"string","Team":"string","Velocity":"string","選手":"string"},"operation_type":"group_by"},{"active":true,"columns":["Result"],"data_options":{"Date":"string","Game":"integer","Pitch":"string","Pitches":"integer","Player":"string","Result":"string","ResultType":"string","Team":"string","Velocity":"string","選手":"string"},"operation_type":"summarise","query":"count"},{"active":true,"data_options":{"Player":"string","Result_count":"integer","Team":"string"},"direction":"desc","operation_type":"sorting","sort_by":"Result_count"}]},"chunks":null,"kind":"Elixir.KinoExplorer.DataTransformCell","livebook_object":"smart_cell"} -->
+
+```elixir
+require Explorer.DataFrame
+
+output
+|> Explorer.DataFrame.lazy()
+|> Explorer.DataFrame.group_by(["Team", "Player"])
+|> Explorer.DataFrame.summarise(Result_count: count(col("Result")))
+|> Explorer.DataFrame.arrange(desc: col("Result_count"))
+```
+
+```elixir
+database_path = Kino.FS.file_path("blah.sqlite")
+```
+
+```elixir
+Adbc.download_driver!(:sqlite)
+database_path = Kino.FS.file_path("blah.sqlite")
+{:ok, db} = Kino.start_child({Adbc.Database, driver: :sqlite, uri: database_path})
+{:ok, conn} = Kino.start_child({Adbc.Connection, database: db})
+```
+
+```elixir
+Adbc.Connection.query!(conn, "select * from test")
+```
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_query(conn, "select * from test", [])
+df
+```
+
+<!-- livebook:{"attrs":{"chart_title":null,"height":null,"layers":[{"active":true,"chart_type":"point","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"output","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"Date","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"temporal","y_field":"Game","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"quantitative"}],"vl_alias":"Elixir.VegaLite","width":null},"chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+VegaLite.new()
+|> VegaLite.data_from_values(output, only: ["Date", "Game"])
+|> VegaLite.mark(:point)
+|> VegaLite.encode_field(:x, "Date", type: :temporal)
+|> VegaLite.encode_field(:y, "Game", type: :quantitative)
+```
+
+```elixir
+
+```
+
+<!-- livebook:{"attrs":{"database_path":"blah.sqllite","type":"sqlite","variable":"conn"},"chunks":null,"kind":"Elixir.KinoDB.ConnectionCell","livebook_object":"smart_cell"} -->
+
+```elixir
+opts = [database: "blah.sqllite"]
+{:ok, conn} = Kino.start_child({Exqlite, opts})
+```
+
+```elixir
+# We'll just keep it in memory right now
+# {:ok, conn} = Exqlite.Sqlite3.open("blah.sqllite")
+
+# :ok = Exqlite.Sqlite3.execute(conn, "drop tabletest")
+
+# # Create the table
+# :ok = Exqlite.Sqlite3.execute(conn, "create table test (id integer primary key, stuff text)")
+
+# Exqlite.Sqlite3.close(conn)
+```
+
+```elixir
+database_path = Kino.FS.file_path("blah.sqlite")
+{:ok, conn} = Kino.start_child({Exqlite, database: database_path})
+
+Exqlite.query!(conn, "PRAGMA table_list", [])
+```
+
+```elixir
+Exqlite.query(conn, "select * from test")
+```
+
+```elixir
+defmodule DataframeTools do
+  # def to_meili(dataframe, meili_instance) do
+  # end
+
+  def to_sqlite(connection, df, table_name) when is_binary(table_name) do
+    # {:ok, conn} = Exqlite.Sqlite3.open(":memory:")
+
+    names = Explorer.DataFrame.names(df)
+    dtypes = Explorer.DataFrame.dtypes(df)
+    IO.inspect(dtypes)
+    column_definition = dtypes_to_schema_def(dtypes, names)
+
+    # drop the table
+    Exqlite.query(connection, "DROP table #{table_name}")
+
+    # create the new table
+    create_statement = "create table #{table_name} (#{column_definition})"
+    IO.puts(create_statement)
+    prepared_create = Exqlite.prepare!(connection, "create", create_statement)
+
+    _ret =
+      Exqlite.execute(connection, prepared_create, [])
+
+    # insert the data
+    names_joined = names |> Enum.join(", ")
+    placeholders_joined = names |> Enum.map(fn _ -> "?" end) |> Enum.join(", ")
+    IO.inspect(placeholders_joined)
+    insert_query = "insert into #{table_name} (#{names_joined}) values (#{placeholders_joined})"
+    IO.inspect(insert_query)
+    prepared_insert = Exqlite.prepare!(connection, "insert", insert_query)
+
+    Explorer.DataFrame.to_rows_stream(df)
+    |> Enum.each(fn row ->
+      values = map_fetch_values_in_order(row, names)
+      # IO.inspect("inserting #{values |> Enum.map(fn x -> inspect(x) end) |> Enum.join(", ")}")
+
+      _ =
+        Exqlite.execute(connection, prepared_insert, values)
+    end)
+
+    connection
+  end
+
+  @doc ~S"""
+    sorts a map in the specified order and returns a keyword list
+
+    ## Examples
+      iex> DataframeTools.map_to_sorted_kw_list(%{y: 3, z: 8, x: 4}, [:z, :x])
+      [z: 8, x: 4]
+
+      iex> DataframeTools.map_to_sorted_kw_list(%{"y" => 3, "z" => 8, "x" => 4}, ["z", "x"])
+      [{"z", 8}, {"x", 4}]
+  """
+  def map_to_sorted_kw_list(map, order) do
+    order
+    |> Enum.map(fn item ->
+      {item, Map.get(map, item)}
+    end)
+  end
+
+  @doc ~S"""
+    fetches the values from the map in order
+
+    ## Examples
+      iex> DataframeTools.map_fetch_values_in_order(%{y: 3, z: 8, x: 4}, [:z, :x])
+      [8, 4]
+
+      iex> DataframeTools.map_fetch_values_in_order(%{y: 3, z: 8, x: 4}, [:z, :i, :x])
+      [8, nil, 4]
+
+  """
+  def map_fetch_values_in_order(map, order) do
+    order
+    |> Enum.map(fn item_name ->
+      Map.get(map, item_name)
+    end)
+  end
+
+  defp dtypes_to_schema_def(dtypes, order) do
+    IO.inspect(dtypes, label: "dtypes_to_schema_def")
+    # example
+    #     %{
+    #   "Date" => :string,
+    #   "Game" => :integer,
+    #   "Pitch" => :string,
+    #   "Pitches" => :integer,
+    #   "Player" => :string,
+    #   "Result" => :string,
+    #   "ResultType" => :string,
+    #   "Team" => :string,
+    #   "Velocity" => :string,
+    #   "選手" => :string
+    # }
+    dtypes
+    |> map_to_sorted_kw_list(order)
+    |> Enum.map(fn {k, v} ->
+      suffix =
+        case v do
+          :string -> "text"
+          :integer -> "integer"
+          :float -> "real"
+          _ -> "null"
+        end
+
+      "#{k} #{suffix}"
+    end)
+    |> Enum.join(", ")
+  end
+end
+```
+
+```elixir
+DataframeTools.to_sqlite(conn, output, "baseball_stats")
+```
+
+```elixir
+Exqlite.query(conn, "SELECT * from baseball_stats", [])
+```

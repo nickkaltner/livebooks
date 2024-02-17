@@ -1,0 +1,41 @@
+# Explorer test
+
+```elixir
+Mix.install([
+  {:explorer, "~> 0.5.6"},
+  {:kino_explorer, "~> 0.1.7"},
+  {:kino_slack, "~> 0.1.1"},
+  {:req, "~> 0.3.10"}
+])
+```
+
+## Section
+
+```elixir
+response =
+  Req.get!(
+    "https://raw.githubusercontent.com/westbaystars/first-pitch-homeruns/main/balls-in-play-2022.tsv"
+  )
+```
+
+```elixir
+require Explorer.DataFrame, as: DF
+
+frame = DF.load_csv!(response.body, delimiter: "\t")
+```
+
+<!-- livebook:{"attrs":{"assign_to":null,"data_frame":"frame","data_frame_alias":"Elixir.DF","is_data_frame":true,"missing_require":null,"operations":[{"active":true,"column":"Result","data_options":{"Date":"string","Game":"integer","Pitch":"string","Pitches":"integer","Player":"string","Result":"string","ResultType":"string","Team":"string","Velocity":"integer","選手":"string"},"datalist":["single","double","home-run","triple"],"filter":"equal","message":null,"operation_type":"filters","type":"string","value":"home-run"}]},"chunks":null,"kind":"Elixir.KinoExplorer.DataTransformCell","livebook_object":"smart_cell"} -->
+
+```elixir
+frame |> DF.filter(col("Result") == "home-run")
+```
+
+<!-- livebook:{"attrs":{"channel":"#hi","message":"","token_secret_name":""},"chunks":null,"kind":"Elixir.KinoSlack.MessageCell","livebook_object":"smart_cell"} -->
+
+```elixir
+
+```
+
+```elixir
+
+```
