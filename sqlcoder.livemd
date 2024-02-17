@@ -105,6 +105,9 @@ Kino.listen(form, fn %{data: %{question: question}} ->
   prompt = SQLCoderHelpers.generate_prompt(question, metadata_content)
   # IO.puts String.length(prompt)
 
+  Kino.Markdown.new("generating sql")
+  |> then(&Kino.Frame.render(frame, &1))
+
   output = Nx.Serving.run(serving, prompt)
 
   %{results: [%{text: text} | _tail]} = output
