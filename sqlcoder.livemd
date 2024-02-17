@@ -40,7 +40,7 @@ metadata_content =
 generation_config = %{
   generation_config
   | max_new_tokens: 300,
-    num_beams: 5
+    extra_config: %{num_beams: 5}
 }
 ```
 
@@ -83,6 +83,10 @@ prompt = SQLCoderHelpers.generate_prompt(question, metadata_content)
 IO.puts(String.length(prompt))
 
 output = Nx.Serving.run(serving, prompt)
+```
+
+```elixir
+output
 ```
 
 ```elixir
