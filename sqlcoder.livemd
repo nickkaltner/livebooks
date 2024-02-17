@@ -46,11 +46,13 @@ defmodule SQLCoderHelpers do
 end
 ```
 
-```elixir
+````elixir
 metadata_content =
   Kino.FS.file_path("metadata.sql")
   |> File.read!()
-```
+
+Kino.Markdown.new("```sql\n#{metadata_content}\n```\n")
+````
 
 ```elixir
 # {:ok, model_info} = Bumblebee.load_model({:hf, "defog/sqlcoder-70b-alpha"})
