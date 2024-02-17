@@ -39,12 +39,10 @@ defmodule SQLCoderHelpers do
     """
   end
 
-  
-  def format_sql(sql) do
-    stop_words = ~w!SELECT FROM "GROUP BY" "ORDER BY" LIMIT "INNER JOIN" "LEFT JOIN" "RIGHT JOIN" JOIN HAVING!
+  # def format_sql(sql) do
+  #   stop_words = ~w!SELECT FROM "GROUP BY" "ORDER BY" LIMIT "INNER JOIN" "LEFT JOIN" "RIGHT JOIN" JOIN HAVING!
 
-  end
-  
+  # end
 end
 ```
 
