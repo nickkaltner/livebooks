@@ -5,10 +5,15 @@
 ```elixir
 Mix.install(
   [
-    {:kino_bumblebee, "~> 0.4.0"},
+    {:kino_bumblebee, "~> 0.5.0"},
     {:exla, ">= 0.0.0"}
   ],
-  config: [nx: [default_backend: EXLA.Backend]]
+  config: [
+    nx: [default_backend: EXLA.Backend],
+    exla: [
+      compiler_mode: :xla
+    ]
+  ]
 )
 ```
 
@@ -77,15 +82,17 @@ serving =
 ```
 
 ```elixir
-# question = "Do we get more revenue from customers in New York compared to customers in San Francisco? Give me the total revenue for each city, and the difference between the two."
-# prompt = SQLCoderHelpers.generate_prompt(question, metadata_content)
-# IO.puts String.length(prompt)
+question =
+  "Do we get more revenue from customers in New York compared to customers in San Francisco? Give me the total revenue for each city, and the difference between the two."
 
-# output = Nx.Serving.run(serving, prompt)
+prompt = SQLCoderHelpers.generate_prompt(question, metadata_content)
+IO.puts(String.length(prompt))
 
-# %{results: [ %{text: text}| tail]} = output
+output = Nx.Serving.run(serving, prompt)
 
-# IO.puts text
+%{results: [%{text: text} | tail]} = output
+
+IO.puts(text)
 ```
 
 ````elixir
@@ -111,14 +118,14 @@ Kino.listen(form, fn %{data: %{question: question}} ->
   |> then(&Kino.Frame.render(frame, &1))
 
   output = Nx.Serving.run(serving, prompt)
-
+  IO.puts("done")
   %{results: [%{text: text} | _tail]} = output
   answer = text |> String.split("### Answer") |> List.last()
   answer = ~r/\[\/?QUESTION\]/ms |> Regex.replace(answer, "**")
   answer = ~r/^.*\[SQL\]/m |> Regex.replace(answer, "```sql")
 
   seconds_elapsed = Time.diff(Time.utc_now(), start_time)
-  answer = "#{answer}```\nTime elapsed #{seconds_elapsed} seconds."
+  answer = "#{answer}```\n\nTime elapsed #{seconds_elapsed} seconds."
 
   Kino.Markdown.new(answer)
   |> then(&Kino.Frame.render(frame, &1))

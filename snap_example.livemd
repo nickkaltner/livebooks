@@ -1,0 +1,221 @@
+# Snap tests
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"},
+  {:finch, "~> 0.18.0"},
+  {:snap, github: "nickkaltner/snap", branch: "scroll"},
+  {:explorer, "~> 0.8.1"},
+  {:kino_explorer, "~> 0.1.18"}
+])
+```
+
+## Section
+
+```elixir
+defmodule Elastic do
+  use Snap.Cluster, otp_app: :my_app
+end
+```
+
+```elixir
+Kino.start_child!({Elastic, [url: "http://elastic.local:9200"]})
+```
+
+```elixir
+{:ok, results} =
+  Snap.Search.search(Elastic, "products_new", %{query: %{match_all: %{}}, size: 10_000})
+
+results
+```
+
+```elixir
+results =
+  Snap.Search.scroll(Elastic, "products_new", %{
+    query: %{match_all: %{}},
+    size: 10_000,
+    sort: ["_doc"]
+  })
+
+results
+```
+
+```elixir
+list = results |> Stream.map(fn x -> x.source end) |> Enum.to_list()
+```
+
+```elixir
+Kino.Shorts.data_table(list)
+```
+
+```elixir
+df = Explorer.DataFrame.new(list)
+```
+
+```elixir
+require Explorer.DataFrame, as: DF
+```
+
+```elixir
+alias Explorer.Series
+
+df
+|> DF.mutate_with(fn ldf ->
+  [
+    "Order Date": Series.strptime(ldf["Order Date"], "%m/%d/%Y") |> Series.cast(:date),
+    "Ship Date": Series.strptime(ldf["Ship Date"], "%m/%d/%Y") |> Series.cast(:date),
+    Region: Series.cast(ldf["Region"], :category),
+    Country: Series.cast(ldf["Country"], :category),
+    "Item Type": Series.cast(ldf["Item Type"], :category),
+    "Sales Channel": Series.cast(ldf["Sales Channel"], :category)
+  ]
+end)
+
+# |> DF.dtypes()
+```
+
+```elixir
+DF.correlation(df, method: :spearman)
+```
+
+```elixir
+Table.to_rows(results) |> Enum.count()
+```
+
+```elixir
+Kino.Shorts.data_table(results)
+```
+
+```elixir
+Explorer.DataFrame.new(results)
+```
+
+```elixir
+defmodule SnapScroll do
+  def scroll(cluster, index, query, options) do
+    # Stream.resource()
+  end
+end
+
+{:ok, results} =
+  Snap.Search.search(Elastic, "products_new", %{query: %{match_all: %{}}, size: 10_000},
+    scroll: "1m"
+  )
+```
+
+```elixir
+Stream.resource(
+  fn ->
+    0
+  end,
+  fn scroll_state ->
+    case scroll_state do
+      5 -> {:halt, 5}
+      number -> {[number], number + 1}
+    end
+  end,
+  fn _scroll_state ->
+    [5]
+  end
+)
+|> Stream.take(6)
+|> Enum.to_list()
+```
+
+```elixir
+out =
+  Stream.resource(
+    fn ->
+      {:ok, results} =
+        Snap.Search.search(Elastic, "products_new", %{query: %{match_all: %{}}, size: 10_000},
+          scroll: "1m"
+        )
+
+      results
+    end,
+    fn results ->
+      # IO.inspect(results)
+      hits = results.hits.hits
+
+      if Enum.empty?(hits) do
+        {:halt, results}
+      else
+        # IO.inspect(results.scroll_id)
+        {:ok, new_results} = Snap.Search.scroll_req(Elastic, results.scroll_id)
+        # do another scroll
+        {new_results, new_results}
+      end
+    end,
+    fn results ->
+      IO.puts("finalizer")
+      IO.inspect(results)
+      results
+    end
+  )
+
+# |> Stream.take(5)
+```
+
+```elixir
+out =
+  Stream.resource(
+    fn ->
+      nil
+    end,
+    fn scroll_id ->
+      results =
+        if is_nil(scroll_id) do
+          {:ok, results} =
+            Snap.Search.search(Elastic, "products_new", %{query: %{match_all: %{}}, size: 10_000},
+              scroll: "1m"
+            )
+
+          results
+        else
+          {:ok, results} = Snap.Search.scroll_req(Elastic, scroll_id)
+          results
+        end
+
+      # IO.inspect(results)
+
+      hits = results.hits.hits
+
+      if Enum.empty?(hits) do
+        {:halt, nil}
+      else
+        new_scroll_id = results.scroll_id
+        # do another scroll
+        {results, new_scroll_id}
+      end
+    end,
+    fn _ ->
+      # unused
+      IO.puts("finalizer")
+    end
+  )
+```
+
+```elixir
+x =
+  out
+  |> Stream.map(fn item ->
+    item.id
+  end)
+  |> Enum.to_list()
+```
+
+```elixir
+x |> Enum.count()
+```
+
+```elixir
+x |> Enum.sort() |> Enum.uniq() |> Enum.count()
+```
+
+```elixir
+out
+|> Stream.map(fn item ->
+  item.id
+end)
+|> Enum.uniq()
+```
